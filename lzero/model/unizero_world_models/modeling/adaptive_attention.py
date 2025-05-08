@@ -12,6 +12,7 @@ from .kv_caching import KeysValues
 from .transformer import apply_rotary_emb
 from .attention import Attention
 from .transformer_config import TransformerConfig
+from .encodings.rpb import RelativePositionBias
 
 class AdaptiveSpanAttention(Attention):
     """
@@ -63,6 +64,11 @@ class AdaptiveSpanAttention(Attention):
         causal = torch.tril(torch.ones(self.max_len, self.max_len, dtype=torch.bool))
         self.register_buffer('causal_mask', causal)
 
+        if config.relative_emb:
+            self.relative_bias = RelativePositionBias(config.num_heads, config.max_relative_position)
+        else:
+            self.relative_bias = None
+
     def forward(
         self,
         x: torch.Tensor,
@@ -93,7 +99,13 @@ class AdaptiveSpanAttention(Attention):
         total_len = L + T
 
         # raw attention scores
-        scores = (q @ k.transpose(-2,-1)) * (1.0 / math.sqrt(self.head_dim)) # (B, nh, T, total_len)
+        att = (q @ k.transpose(-2,-1)) * (1.0 / math.sqrt(self.head_dim)) # (B, nh, T, total_len)
+
+        # relative positional encoding bias
+        if self.relative_bias is not None:
+            # Add bias shaped [1, nh, T, L+T]
+            rel_bias = self.relative_bias(q_len=T, k_len=L + T)
+            att += rel_bias
 
         # apply causal mask and remove stale slots
         #   slice out the T×(L+T) block
@@ -127,7 +139,7 @@ class AdaptiveSpanAttention(Attention):
         final_mask = mask & adapt_mask
 
         # apply mask, softmax, dropout
-        scores = scores.masked_fill(~final_mask, float('-inf'))
+        scores = att.masked_fill(~final_mask, float('-inf'))
         attn   = F.softmax(scores, dim=-1)
         attn   = self.attn_drop(attn)
 

@@ -19,10 +19,15 @@ class TransformerConfig:
     resid_pdrop: float
     attn_pdrop: float
 
-    # for RoPE
+    # Positional Encoding Params
+    # rope
     rope_theta: float
     max_seq_len: int
     rotary_emb: bool = False
+
+    # relative
+    relative_emb : bool = False
+    max_relative_position : Optional[int] = 20
 
     # Routing Attention Params
     # n : number of clusters
@@ -51,6 +56,8 @@ class TransformerConfig:
     gru_gating : Optional[bool] = True
     hybrid_local_layers: Optional[int] = 4
     interleave_local_causal : bool = False
+
+
 
 
     @property

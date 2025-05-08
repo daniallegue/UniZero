@@ -12,6 +12,7 @@ from .kv_caching import KeysValues
 from .transformer import apply_rotary_emb
 from .attention import Attention
 from .transformer_config import TransformerConfig
+from .encodings.rpb import RelativePositionBias
 
 
 class CausalAttention(Attention):
@@ -51,6 +52,12 @@ class CausalAttention(Attention):
         causal_mask = torch.tril(torch.ones(config.max_tokens, config.max_tokens))
         self.register_buffer('mask', causal_mask)
 
+        # add relative position bias
+        if config.relative_emb:
+            self.relative_bias = RelativePositionBias(config.num_heads, config.max_relative_position)
+        else:
+            self.relative_bias = None
+
     def forward(self, x: torch.Tensor, kv_cache: Optional[KeysValues] = None,
                 valid_context_lengths: Optional[torch.Tensor] = None, freqs_cis: torch.Tensor = None) -> torch.Tensor:
         """
@@ -86,6 +93,12 @@ class CausalAttention(Attention):
             k, v = kv_cache.get()  # time occupancy 5%
 
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
+
+        # relative positional encoding bias
+        if self.relative_bias is not None:
+            # Add bias shaped [1, nh, T, L+T]
+            rel_bias = self.relative_bias(q_len=T, k_len=L + T)
+            att += rel_bias
 
         if valid_context_lengths is not None:
             # Final mask.shape: (B, T, L + T)
