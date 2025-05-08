@@ -13,6 +13,7 @@ from .transformer import apply_rotary_emb
 from .attention import Attention
 from .transformer_config import TransformerConfig
 from .encodings.rpb import RelativePositionBias
+from .encodings.lope import LoPE
 
 
 class CausalAttention(Attention):
@@ -58,6 +59,12 @@ class CausalAttention(Attention):
         else:
             self.relative_bias = None
 
+        # add learned position embedding
+        if config.lope:
+            self.lope = LoPE(config.num_heads, config.head_dim, config.max_tokens)
+        else:
+            self.lope = None
+
     def forward(self, x: torch.Tensor, kv_cache: Optional[KeysValues] = None,
                 valid_context_lengths: Optional[torch.Tensor] = None, freqs_cis: torch.Tensor = None) -> torch.Tensor:
         """
@@ -87,6 +94,9 @@ class CausalAttention(Attention):
 
         if self.config.rotary_emb:
             q, k = apply_rotary_emb(q, k, freqs_cis=freqs_cis)
+
+        if self.lope is not None:
+            q, k = self.lope(q, k, seq_len=T)
 
         if kv_cache is not None:
             kv_cache.update(k, v)  # time occupancy 21%

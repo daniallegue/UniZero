@@ -39,6 +39,17 @@ class Transformer(nn.Module):
         ])
         self.ln_f = nn.LayerNorm(config.embed_dim)
 
+        rope = getattr(config, "rotary_emb", False)
+        rpb = getattr(config, "relative_emb", False)
+        lope = getattr(config, "lope", False)
+
+        # ensures only one encoding method used at a time
+        total = int(rope) + int(rpb) + int(lope)
+        assert total <= 1, (
+            "Only one positional encoding method can be active at a time. "
+            f"Currently: rotary_emb={rope}, relative_emb={rpb}, use_lope={lope}"
+        )
+
         if self.config.rotary_emb:
             freqs_cis = precompute_freqs_cis(
                 self.config.embed_dim // self.config.num_heads,

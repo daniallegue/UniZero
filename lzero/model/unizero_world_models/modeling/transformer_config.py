@@ -29,6 +29,9 @@ class TransformerConfig:
     relative_emb : bool = False
     max_relative_position : Optional[int] = 20
 
+    # lope
+    lope: bool = False
+
     # Routing Attention Params
     # n : number of clusters
     routing_num_clusters: Optional[int] = None

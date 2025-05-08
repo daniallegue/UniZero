@@ -13,6 +13,7 @@ from .transformer import apply_rotary_emb
 from .attention import Attention
 from .transformer_config import TransformerConfig
 from .encodings.rpb import RelativePositionBias
+from .encodings.lope import LoPE
 
 
 class LocalAttention(Attention):
@@ -62,6 +63,14 @@ class LocalAttention(Attention):
         else:
             self.relative_bias = None
 
+        # add learned positional encoding
+        if config.lope:
+            self.lope = LoPE(num_heads=config.num_heads,
+                head_dim=config.embed_dim // config.num_heads,
+                max_seq_len=config.max_seq_len)
+        else:
+            self.lope = None
+
     def forward(
         self,
         x: torch.Tensor,
@@ -99,6 +108,10 @@ class LocalAttention(Attention):
         # apply rotary embeddings if used
         if self.config.rotary_emb:
             q, k = apply_rotary_emb(q, k, freqs_cis=freqs_cis)
+
+        # apply learned positional encodings if used
+        if self.lope is not None:
+            q, k = self.lope(q, k, seq_len=T)
 
         # update and retrieve cache
         if kv_cache is not None:

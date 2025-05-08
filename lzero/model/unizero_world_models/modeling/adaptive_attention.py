@@ -13,6 +13,7 @@ from .transformer import apply_rotary_emb
 from .attention import Attention
 from .transformer_config import TransformerConfig
 from .encodings.rpb import RelativePositionBias
+from .encodings.lope import LoPE
 
 class AdaptiveSpanAttention(Attention):
     """
@@ -69,6 +70,13 @@ class AdaptiveSpanAttention(Attention):
         else:
             self.relative_bias = None
 
+        if config.lope:
+            self.lope = LoPE(num_heads=config.num_heads,
+                head_dim=config.embed_dim // config.num_heads,
+                max_seq_len=config.max_seq_len)
+        else:
+            self.lope = None
+
     def forward(
         self,
         x: torch.Tensor,
@@ -87,6 +95,10 @@ class AdaptiveSpanAttention(Attention):
         # apply rotary embeddings if used
         if getattr(self.config, 'rotary_emb', False) and freqs_cis is not None:
             q, k = apply_rotary_emb(q, k, freqs_cis=freqs_cis)
+
+        # apply learned positional encoding if used
+        if self.lope is not None:
+            q, k = self.lope(q, k, seq_len=T)
 
         # update cache
         if kv_cache is not None:
